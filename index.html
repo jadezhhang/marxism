@@ -252,9 +252,19 @@
       padding: 10px 12px; border-left: 4px solid var(--red);
       border-radius: 0 9px 9px 0; background: var(--red-2); color: #753f3f; font-size: 13px;
     }
-    #chapters.answers-hidden .outline-answer-content,
-    #chapters.answers-hidden .outline-meta { display: none; }
-    #chapters.answers-hidden .outline-card { padding-block: 14px; }
+    .outline-actions {
+      flex: 0 0 auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end;
+    }
+    .outline-answer-toggle {
+      border: 1px solid #b9c9c0; border-radius: 999px; padding: 6px 11px;
+      background: var(--green-2); color: var(--green); cursor: pointer; font-size: 13px; font-weight: 800;
+    }
+    .outline-answer-toggle[aria-expanded="true"] {
+      background: #fff; color: var(--muted); border-color: #d3ddd6; font-weight: 700;
+    }
+    .outline-card.answer-hidden .outline-answer-content,
+    .outline-card.answer-hidden .outline-meta { display: none; }
+    .outline-card.answer-hidden { padding-block: 14px; }
     .memory {
       margin-top: 14px; padding: 12px 14px; border-radius: 10px;
       background: var(--amber-2); color: #664819;
@@ -536,14 +546,14 @@
     </section>
 
     <section class="view" id="chapters">
-      <div class="section-head"><div><h2>提纲问答式复习</h2><p>依据 2023 版考试提纲逐项整理，展开章节即可直接背诵</p></div></div>
+      <div class="section-head"><div><h2>提纲问答式复习</h2><p>依据 2023 版考试提纲逐项整理；每道题可单独展开答案，适合自测背诵</p></div></div>
       <div class="memorize-toolbar">
         <div class="memorize-progress">
           <div class="memorize-progress-line"><strong id="memorizeText">已背 0 / 43</strong><span id="memorizeRate">0%</span></div>
           <div class="progress"><span id="memorizeProgress"></span></div>
         </div>
         <div class="memorize-actions">
-          <button class="secondary" id="toggleAnswers">只看题目</button>
+          <button class="secondary" id="toggleAnswers">显示全部答案</button>
           <button class="secondary" id="expandChapters">展开全部章节</button>
         </div>
       </div>
@@ -3273,12 +3283,14 @@
     const STORAGE_KEYS = {
       version: "mayuanDataVersion",
       wrong: "mayuanWrongQuestions_fullpapers_v6_review_flags",
-      memorized: "mayuanMemorized_corrected_v3"
+      memorized: "mayuanMemorized_corrected_v3",
+      outlineAnswers: "mayuanOutlineAnswers_individual_v1"
     };
     if (localStorage.getItem(STORAGE_KEYS.version) !== DATA_VERSION) {
       ["marxismWrongBook","marxismOutlineMemorized","mayuanWrongQuestions_corrected_v2","mayuanWrongQuestions_corrected_v3","mayuanWrongQuestions_fullpapers_v5_answer_corrected"].forEach(key => localStorage.removeItem(key));
       localStorage.removeItem(STORAGE_KEYS.wrong);
       localStorage.removeItem(STORAGE_KEYS.memorized);
+      localStorage.removeItem(STORAGE_KEYS.outlineAnswers);
       localStorage.setItem(STORAGE_KEYS.version, DATA_VERSION);
     }
     const labels = {home:"首页",chapters:"章节复习",concepts:"核心概念",compare:"易混知识点",choice:"选择题练习",judge:"判断题练习",real:"真题练习",short:"简答题背诵",wrong:"错题本"};
@@ -3291,7 +3303,7 @@
       judge: {index:0, answered:false, attempts:0, correct:0},
       wrong: readLocalJSON(STORAGE_KEYS.wrong, []),
       memorized: readLocalJSON(STORAGE_KEYS.memorized, {}),
-      answersVisible: true,
+      outlineAnswers: readLocalJSON(STORAGE_KEYS.outlineAnswers, {}),
       real: {mode:"paper", paperId:"", type:"all", mixIndex:0, order:[]}
     };
 
@@ -3316,6 +3328,15 @@
             </div>
           </div>
         </details>`).join("");
+      host.querySelectorAll(".outline-answer-toggle").forEach(button => button.addEventListener("click", () => {
+        const id = button.dataset.id;
+        const card = button.closest(".outline-card");
+        const shouldShow = button.getAttribute("aria-expanded") !== "true";
+        setOutlineAnswerVisibility(card, shouldShow);
+        state.outlineAnswers[id] = shouldShow;
+        localStorage.setItem(STORAGE_KEYS.outlineAnswers, JSON.stringify(state.outlineAnswers));
+        updateGlobalAnswerToggleText();
+      }));
       host.querySelectorAll(".memorize-btn").forEach(button => button.addEventListener("click", () => {
         const id = button.dataset.id;
         state.memorized[id] = !state.memorized[id];
@@ -3327,22 +3348,43 @@
         updateMemorizeProgress();
       }));
       updateMemorizeProgress();
+      updateGlobalAnswerToggleText();
     }
     function outlineCard(item, index) {
       const [id, question, answer, keywords, examType, pitfall] = item;
       const memorized = Boolean(state.memorized[id]);
-      return `<article class="outline-card searchable ${memorized?"memorized":""}" id="outline-${id}" data-title="${escapeHtml(question)}">
+      const answerOpen = Boolean(state.outlineAnswers[id]);
+      return `<article class="outline-card searchable ${memorized?"memorized":""} ${answerOpen?"":"answer-hidden"}" id="outline-${id}" data-title="${escapeHtml(question)}">
         <div class="outline-question-row">
           <div><span class="outline-number">提纲问题 ${index+1}</span><h3 class="outline-question">${question}</h3></div>
-          <button class="memorize-btn" data-id="${id}" aria-pressed="${memorized}">${memorized?"✓ 已背":"未背"}</button>
+          <div class="outline-actions">
+            <button class="outline-answer-toggle" data-id="${id}" aria-expanded="${answerOpen}" aria-controls="outline-answer-${id}">${answerOpen?"收起答案":"查看答案"}</button>
+            <button class="memorize-btn" data-id="${id}" aria-pressed="${memorized}">${memorized?"✓ 已背":"未背"}</button>
+          </div>
         </div>
-        <div class="outline-answer-content"><b>考试答案</b><ol>${answer.map(point=>`<li>${point}</li>`).join("")}</ol></div>
+        <div class="outline-answer-content" id="outline-answer-${id}"><b>考试答案</b><ol>${answer.map(point=>`<li>${point}</li>`).join("")}</ol></div>
         <div class="outline-meta">
           <div class="keyword-list"><b>关键词：</b>${keywords.map(word=>`<span class="keyword-chip">${word}</span>`).join("")}</div>
           <div class="exam-type"><b>常见考法：</b>${examType}</div>
           ${pitfall?`<div class="outline-pitfall"><b>注意 / 易错：</b>${pitfall}</div>`:""}
         </div>
       </article>`;
+    }
+    function setOutlineAnswerVisibility(card, show) {
+      if (!card) return;
+      card.classList.toggle("answer-hidden", !show);
+      const button = card.querySelector(".outline-answer-toggle");
+      if (button) {
+        button.setAttribute("aria-expanded", String(show));
+        button.textContent = show ? "收起答案" : "查看答案";
+      }
+    }
+    function updateGlobalAnswerToggleText() {
+      const button = document.getElementById("toggleAnswers");
+      if (!button) return;
+      const cards = [...document.querySelectorAll("#chapterList .outline-card")];
+      const hasHidden = cards.some(card => card.classList.contains("answer-hidden"));
+      button.textContent = hasHidden ? "显示全部答案" : "隐藏全部答案";
     }
     function updateMemorizeProgress() {
       const allIds = outlineChapters.flatMap(chapter => chapter.items.map(item => item[0]));
@@ -3736,10 +3778,16 @@
       document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>navTo(b.dataset.nav)));
       document.getElementById("resetChoice").addEventListener("click",()=>resetQuiz("choice"));
       document.getElementById("resetJudge").addEventListener("click",()=>resetQuiz("judge"));
-      document.getElementById("toggleAnswers").addEventListener("click", event => {
-        state.answersVisible = !state.answersVisible;
-        document.getElementById("chapters").classList.toggle("answers-hidden", !state.answersVisible);
-        event.currentTarget.textContent = state.answersVisible ? "只看题目" : "显示答案";
+      document.getElementById("toggleAnswers").addEventListener("click", () => {
+        const cards = [...document.querySelectorAll("#chapterList .outline-card")];
+        const shouldShow = cards.some(card => card.classList.contains("answer-hidden"));
+        cards.forEach(card => {
+          setOutlineAnswerVisibility(card, shouldShow);
+          const id = card.id.replace("outline-", "");
+          state.outlineAnswers[id] = shouldShow;
+        });
+        localStorage.setItem(STORAGE_KEYS.outlineAnswers, JSON.stringify(state.outlineAnswers));
+        updateGlobalAnswerToggleText();
       });
       document.getElementById("expandChapters").addEventListener("click", event => {
         const details = [...document.querySelectorAll("#chapterList .chapter")];
