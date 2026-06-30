@@ -659,7 +659,6 @@
   <script>
     "use strict";
 
-    // ===== 内容数据：后续修改知识点，主要编辑本区域 =====
     const chapters = [
       {
         title: "绪论：马克思主义的创立与发展",
@@ -799,7 +798,6 @@
 
     const conceptByName = Object.fromEntries(concepts.map(item => [item[0], item]));
 
-    // 2026详细学习提纲逐题答案：共43题（第六章明确不作考试要求）
     const outlineChapters = [
       {
             "title": "绪论部分",
@@ -1639,7 +1637,6 @@
       outlineChapters.flatMap(chapter => chapter.items.map(item => [item[0], item[2]]))
     );
 
-    // 真题仅来自用户提供的历年试卷；完全重复的试卷文件只保留一份数据。
     const legacyRealQuestions = [
       {id:"r0809s1",year:"2008-2009",type:"single",source:"2008-2009 第一学期期末试卷 A卷",question:"马克思主义哲学认为，世界的真正统一性在于它的（ ）。",options:["实践性","运动性","物质性","客观性"],answer:["C"],explanation:"马克思主义认为世界的统一性在于它的物质性，世界统一于物质。"},
       {id:"r0809s2",year:"2008-2009",type:"single",source:"2008-2009 第一学期期末试卷 A卷",question:"既是自然界与人类社会分化统一的历史前提，又是二者统一起来的现实基础的是（ ）。",options:["运动","实践","精神生产","物质生产"],answer:["B"],explanation:"实践使自然界与人类社会发生分化，又把二者现实地联系和统一起来。"},
@@ -1709,9 +1706,6 @@
       {id:"r2324q4",year:"2023-2024",type:"short",source:"2023-2024 第二学期期末试卷 A卷大题",question:"从真理与价值辩证关系看，为什么人们对人工智能技术会产生多种评价？",answer:["真理尺度要求对人工智能的性质、功能和发展规律作客观认识；价值尺度要求从不同主体的需要和利益出发进行评价。","不同主体的需要、利益和社会历史条件不同，对同一技术可能形成不同价值评价。","价值评价必须以真理性认识为基础，人工智能的开发和运用应坚持真理尺度与价值尺度的统一。"],answerNote:"根据正确答案提纲整理"}
     ];
 
-    // ===== 完整真题试卷数据（按“试卷—原大题—原题号”保存）=====
-    // objectiveSection 的每道题格式：[原题号, 题干, 选项, 可选解析]
-    // subjectiveSection 的每道题格式：[原题号, 题干, 答案数组, 答案说明]
     function objectiveSection(id, title, type, rows, answers, instructions, answerBasis) {
       return {
         id, title, type, instructions,
@@ -4090,9 +4084,14 @@
         const list = isReal ? realQuestions : (item.type==="choice" ? choiceQuestions : judgeQuestions);
         const q = list.find(x=>x.id===item.id); if(!q) return "";
         const title = isReal ? q.question : q.q;
-        const explanation = isReal ? q.explanation : q.e;
         const typeName = isReal ? realTypeName(q.type) : (item.type==="choice"?"单选题":"判断题");
-        return `<article class="wrong-card">
+        const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const options = isReal
+          ? (q.options||[]).map((option,index)=>`<button class="option wrongbook-option" data-value="${labels[index]}"><b>${labels[index]}.</b> ${option}</button>`).join("")
+          : (item.type==="choice"
+              ? q.o.map((option,index)=>`<button class="option wrongbook-option" data-value="${index}"><b>${labels[index]}.</b> ${option}</button>`).join("")
+              : `<button class="option wrongbook-option" data-value="true"><b>✓</b> 正确</button><button class="option wrongbook-option" data-value="false"><b>✕</b> 错误</button>`);
+        return `<article class="wrong-card" data-scope="${item.scope}" data-type="${item.type}" data-id="${item.id}">
           <span class="scope-tag">${isReal?"历年真题":"普通练习"}</span>
           ${isReal?`<span class="year-tag">${q.year}</span>`:""}
           <span class="tag error">${typeName}</span>
@@ -4100,26 +4099,64 @@
           ${isReal?`<span class="number-tag">原第${q.originalNumber}题</span>`:""}
           <h3>${title}</h3>
           ${isReal?`<p>${q.sourceFile}</p>`:""}
-          ${reviewAlert(isReal?"real":"practice", q)}
-          ${renderExplanation(explanation, "请重新作答后核对答案。")}
-          <button class="secondary retry" data-scope="${item.scope}" data-type="${item.type}" data-id="${item.id}">重新练习</button>
+          ${isReal && q.type==="multiple" ? `<p class="real-hint">多选题：少选、多选、错选均不得分。</p>` : ""}
+          <div class="options wrongbook-options">${options}</div>
+          ${isReal && q.type==="multiple" ? `<div class="quiz-actions"><button class="primary wrongbook-submit">提交答案</button></div>` : ""}
+          <div class="feedback wrongbook-feedback"></div>
         </article>`;
       }).join("");
-      host.querySelectorAll(".retry").forEach(btn => btn.addEventListener("click", () => {
-        if (btn.dataset.scope === "real") {
-          const question = realQuestions.find(q => q.id === btn.dataset.id);
-          state.real.mode = "mixed";
-          state.real.type = question && isRealSubjective(question) ? "subjective" : (question?.type || "all");
-          state.real.order = [btn.dataset.id, ...realQuestions.filter(q=>q.id!==btn.dataset.id).map(q=>q.id)];
-          state.real.mixIndex = 0;
-          document.getElementById("realType").value = state.real.type;
-          renderRealExam(); navTo("real"); return;
-        }
-        const type = btn.dataset.type;
-        const list = type==="choice" ? choiceQuestions : judgeQuestions;
-        state[type].index = list.findIndex(q=>q.id===btn.dataset.id);
-        state[type].answered = false; renderQuiz(type); navTo(type);
-      }));
+      host.querySelectorAll(".wrong-card").forEach(card => {
+        const isReal = card.dataset.scope === "real";
+        const list = isReal ? realQuestions : (card.dataset.type==="choice" ? choiceQuestions : judgeQuestions);
+        const q = list.find(x=>x.id===card.dataset.id); if(!q) return;
+        card.querySelectorAll(".wrongbook-option").forEach(option => option.addEventListener("click", () => {
+          if(card.dataset.graded==="true") return;
+          if(isReal && q.type==="multiple") option.classList.toggle("selected");
+          else gradeWrongCard(card, q, [option.dataset.value]);
+        }));
+        card.querySelector(".wrongbook-submit")?.addEventListener("click", () => {
+          const selected=[...card.querySelectorAll(".wrongbook-option.selected")].map(option=>option.dataset.value);
+          gradeWrongCard(card, q, selected);
+        });
+      });
+    }
+
+    function gradeWrongCard(card, q, selected) {
+      if(card.dataset.graded==="true") return;
+      const isReal = card.dataset.scope === "real";
+      const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      let expected = [];
+      let answerText = "";
+      let explanation = "";
+      if(isReal) {
+        expected = [...q.answer].sort();
+        answerText = expected.join("、");
+        explanation = renderExplanation(q.explanation);
+      } else if(card.dataset.type === "choice") {
+        expected = [String(q.a)];
+        answerText = `${labels[q.a]}. ${q.o[q.a]}`;
+        explanation = `<p><b>答案解析：</b>${q.e}</p><small>资料出处：${q.s}</small>`;
+      } else {
+        expected = [String(q.a)];
+        answerText = q.a ? "正确" : "错误";
+        explanation = `<p><b>答案解析：</b>${q.e}</p><small>资料出处：${q.s}</small>`;
+      }
+      const actual = [...selected].map(String).sort();
+      const sortedExpected = [...expected].map(String).sort();
+      const ok = sortedExpected.length===actual.length && sortedExpected.every((value,index)=>value===actual[index]);
+      card.dataset.graded = "true";
+      card.querySelectorAll(".wrongbook-option").forEach(option => {
+        option.disabled = true;
+        const val = option.dataset.value;
+        if(sortedExpected.includes(String(val))) option.classList.add("correct");
+        if(actual.includes(String(val)) && !sortedExpected.includes(String(val))) option.classList.add("wrong");
+      });
+      const feedback = card.querySelector(".wrongbook-feedback");
+      feedback.className = `feedback wrongbook-feedback show ${ok?"good":"bad"}`;
+      feedback.innerHTML = `<b>${ok?"回答正确，已移出错题本":"回答错误，继续留在错题本"}</b><p>正确答案：${answerText}</p>${reviewAlert(isReal?"real":"practice", q)}${explanation}`;
+      if(ok) removeWrong(card.dataset.type, q.id, card.dataset.scope);
+      else addWrong(card.dataset.type, q.id, card.dataset.scope);
+      updateWrongCounts();
     }
 
     function realTypeName(type) {
